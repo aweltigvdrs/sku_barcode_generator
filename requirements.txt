@@ -1,0 +1,5 @@
+pandas
+python-barcode[images]
+python-docx
+pillow
+streamlit
