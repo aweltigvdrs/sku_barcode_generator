@@ -2,6 +2,7 @@ import os
 import sys
 import pandas as pd
 import barcode
+import tempfile
 from barcode.writer import ImageWriter
 from PIL import ImageFont
 from docx import Document
@@ -17,7 +18,7 @@ if getattr(sys, 'frozen', False):
 else:
     base_path = os.path.dirname(__file__)
 
-downloads_folder = os.path.join(os.path.expanduser("~"), "Downloads")
+downloads_folder = tempfile.gettempdir()
 barcode_folder = os.path.join(base_path, "barcodes")  # Save barcodes persistently
 
 # Ensure barcode folder exists
