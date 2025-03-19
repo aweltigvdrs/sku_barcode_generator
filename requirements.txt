@@ -3,3 +3,4 @@ python-barcode[images]
 python-docx
 pillow
 streamlit
+openpyxl
