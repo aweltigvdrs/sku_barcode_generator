@@ -4,4 +4,4 @@ openpyxl
 python-barcode
 Pillow
 reportlab
-textwrap
+
