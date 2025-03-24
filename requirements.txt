@@ -1,7 +1,6 @@
-pandas
-python-barcode[images]
-python-docx
-pillow
 streamlit
+pandas
 openpyxl
-docx2pdf
+python-barcode
+Pillow
+reportlab
