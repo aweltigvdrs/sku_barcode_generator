@@ -4,3 +4,4 @@ python-docx
 pillow
 streamlit
 openpyxl
+docx2pdf
