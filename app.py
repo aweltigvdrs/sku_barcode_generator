@@ -11,6 +11,8 @@ from PIL import Image
 import streamlit as st
 import streamlit.components.v1 as components
 import time
+from textwrap import wrap
+
 
 # Setup
 if getattr(sys, 'frozen', False):
@@ -63,11 +65,17 @@ def create_label_pdf(sku, description):
         st.error(f"⚠️ Failed to load barcode image: {e}")
         return None
 
-    # Draw description
+    # Draw multi-line description (wrapped)
     c.setFont("Helvetica", 8)
-    text = description[:34]
-    text_width = c.stringWidth(text, "Helvetica", 8)
-    c.drawString((3 * inch - text_width) / 2, 0.1 * inch, text)
+    max_chars_per_line = 34  # Adjust as needed
+    wrapped_lines = wrap(description, width=max_chars_per_line)
+
+    text_y = 0.15 * inch
+    for line in wrapped_lines:
+        text_width = c.stringWidth(line, "Helvetica", 8)
+        c.drawString((3 * inch - text_width) / 2, text_y, line)
+        text_y -= 0.12 * inch  # move to next line
+
 
     c.showPage()
     c.save()
