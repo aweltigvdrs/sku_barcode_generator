@@ -101,7 +101,7 @@ def create_word_doc(sku, description):
     barcode_para.paragraph_format.space_after = Pt(0)
 
     # Add description text
-    desc_para = doc.add_paragraph(description[:38])
+    desc_para = doc.add_paragraph(description[:34])
     desc_para.alignment = WD_PARAGRAPH_ALIGNMENT.CENTER
     desc_run = desc_para.runs[0]
     desc_run.font.size = Pt(11)
