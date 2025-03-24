@@ -74,7 +74,7 @@ def create_label_pdf(sku, description):
     return pdf_path
 
 # --- Streamlit UI ---
-st.title("📦 SKU Barcode Generator (Linux-Compatible)")
+st.title("📦 SKU Barcode Generator")
 st.write("Enter an SKU to generate a printable label.")
 
 sku_input = st.text_input("Enter SKU:", "")
@@ -91,29 +91,33 @@ if st.button("Generate Label"):
 
             if pdf_path and os.path.exists(pdf_path):
                 with open(pdf_path, "rb") as f:
-                    base64_pdf = base64.b64encode(f.read()).decode("utf-8")
+                    pdf_bytes = f.read()
+                    base64_pdf = base64.b64encode(pdf_bytes).decode("utf-8")
 
-                pdf_viewer = f"""
-                <iframe src="data:application/pdf;base64,{base64_pdf}" width="400" height="300"></iframe>
-                <br>
-                <button onclick="printPDF()">🖨️ Print Label</button>
+                print_button_html = f"""
                 <script>
-                function printPDF() {{
-                    const iframe = document.createElement('iframe');
-                    iframe.style.display = 'none';
-                    iframe.src = "data:application/pdf;base64,{base64_pdf}";
-                    document.body.appendChild(iframe);
-                    iframe.onload = function() {{
+                function openPDF() {{
+                    const pdfData = atob("{base64_pdf}");
+                    const byteArray = new Uint8Array(pdfData.length);
+                    for (let i = 0; i < pdfData.length; i++) {{
+                        byteArray[i] = pdfData.charCodeAt(i);
+                    }}
+                    const blob = new Blob([byteArray], {{ type: 'application/pdf' }});
+                    const blobUrl = URL.createObjectURL(blob);
+                    const printWindow = window.open(blobUrl);
+                    printWindow.onload = function() {{
                         setTimeout(() => {{
-                            iframe.contentWindow.focus();
-                            iframe.contentWindow.print();
+                            printWindow.focus();
+                            printWindow.print();
                         }}, 500);
                     }};
                 }}
                 </script>
+                <button onclick="openPDF()">🖨️ Print Label</button>
                 """
-                st.success("✅ Label ready for print below.")
-                components.html(pdf_viewer, height=400)
+
+                st.success("✅ Label generated. Click below to print.")
+                components.html(print_button_html, height=100)
             else:
                 st.error("❌ Failed to generate label PDF.")
     else:
