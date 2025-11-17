@@ -37,118 +37,117 @@ except Exception as e:
     st.error(f"⚠️ Failed to load Excel file: {e}")
     sys.exit(1)
 
+# ----------------------------
+# HELPERS
+# ----------------------------
 
-# ----------------------------
-# Utilities
-# ----------------------------
 def safe_filename(s: str) -> str:
+    """Generate a consistent filename for caching."""
     h = hashlib.sha1(s.encode("utf-8")).hexdigest()[:10]
-    return f"sku_{h}_{s.replace('/', '_').replace('\\n','')}"
+    return f"sku_{h}"
 
-
-# ----------------------------
-# SPECIAL BARCODE RULE
-# ----------------------------
 def transform_sku_for_barcode(sku: str) -> str:
-    """
-    If SKU starts with '999.' → add two more 9s to encoder data.
-    Example: '999.1234' → encoder data '99999.1234'
-    """
-    sku = sku.strip()
+    """Apply special encoding rules (Option A)."""
 
     if sku.startswith("999."):
-        return "99" + sku  # prepend 2 extra 9s
+        # Add exactly two 9s to the beginning
+        return "99" + sku
 
     return sku
 
-
 # ----------------------------
-# Barcode Generator
+# BARCODE GENERATION
 # ----------------------------
 def generate_barcode(sku: str):
+    """Generate Code128 barcode image (with no printed text)."""
+
     original_sku = sku.strip()
-    encoded_sku = transform_sku_for_barcode(original_sku)  # apply special rule
+    encoded_sku = transform_sku_for_barcode(original_sku)
 
-    filename_base = safe_filename(original_sku)
-    png_path = os.path.join(barcode_folder, filename_base + ".png")
+    file_base = safe_filename(original_sku)
+    png_path = os.path.join(barcode_folder, file_base + ".png")
 
+    # use cached file if exists
     if os.path.exists(png_path):
         return png_path, encoded_sku
 
     code128 = barcode.get_barcode_class("code128")
 
     try:
-        # generate using the encoded SKU
         b_obj = code128(encoded_sku, writer=ImageWriter())
+
         b_obj.save(
-            os.path.join(barcode_folder, filename_base),
+            os.path.join(barcode_folder, file_base),
             options={
                 "module_width": 0.22,
                 "module_height": 8,
-                "text": original_sku,  # human-readable keeps true SKU
+                "write_text": False  # IMPORTANT: do NOT show encoded text
             }
         )
+
     except Exception as e:
         st.error(f"❌ Barcode generation failed: {e}")
-        return None, None
+        return None, encoded_sku
 
-    if os.path.exists(png_path):
-        return png_path, encoded_sku
-    return None, None
-
+    return png_path, encoded_sku
 
 # ----------------------------
-# PDF Label
+# PDF LABEL GENERATOR
 # ----------------------------
 def create_label_pdf(sku: str, description: str):
     pdf_path = os.path.join(downloads_folder, f"{sku}.pdf")
     c = canvas.Canvas(pdf_path, pagesize=(3 * inch, 1 * inch))
 
-    barcode_img_path, encoded_used = generate_barcode(sku)
+    barcode_img_path, encoded_sku = generate_barcode(sku)
     if not barcode_img_path:
-        st.error("❌ Failed to generate barcode image.")
         return None
-
-    st.info(f"Barcode encoded using: {encoded_used}")
 
     try:
         img = Image.open(barcode_img_path)
         w, h = img.size
-        aspect = h / w
+        ratio = h / w
+        target_w = 1.83 * inch
+        target_h = target_w * ratio
 
-        target_width = 1.83 * inch
-        target_height = target_width * aspect
-
+        # Draw barcode image
         c.drawImage(
             barcode_img_path,
             x=0.6 * inch,
-            y=0.4 * inch,
-            width=target_width,
-            height=target_height,
-            preserveAspectRatio=True,
+            y=0.45 * inch,
+            width=target_w,
+            height=target_h,
+            preserveAspectRatio=True
         )
+
     except Exception as e:
         st.error(f"⚠️ Failed to load barcode image: {e}")
         return None
 
+    # --- Draw Correct Human Readable SKU ---
     c.setFont("Helvetica", 8)
-    wrapped = wrap(description or "", width=34)
-    text_y = 0.15 * inch
+    tw = c.stringWidth(sku, "Helvetica", 8)
+    c.drawString((3*inch - tw) / 2, 0.35 * inch, sku)
 
+    # --- Draw Description ---
+    if not description:
+        description = ""
+
+    c.setFont("Helvetica", 8)
+    wrapped = wrap(description, 34)
+    y = 0.15 * inch
     for line in wrapped:
-        text_width = c.stringWidth(line, "Helvetica", 8)
-        c.drawString((3 * inch - text_width) / 2, text_y, line)
-        text_y -= 0.12 * inch
+        tw = c.stringWidth(line, "Helvetica", 8)
+        c.drawString((3*inch - tw) / 2, y, line)
+        y -= 0.12 * inch
 
     c.showPage()
     c.save()
     return pdf_path
 
-
 # ----------------------------
-# Streamlit UI
+# STREAMLIT UI
 # ----------------------------
-st.title("📦 SKU Barcode Generator — Updated Build")
+st.title("📦 SKU Barcode Generator")
 st.write("Enter an SKU to generate a printable label.")
 
 sku_input = st.text_input("Enter SKU:", "").strip()
@@ -159,12 +158,11 @@ if st.button("Generate Label"):
         st.stop()
 
     match = df[df["SKU_normalized"] == sku_input]
-
     if match.empty:
         match = df[df["SKU_normalized"].str.lower() == sku_input.lower()]
 
     if match.empty:
-        st.warning("⚠️ SKU not found.")
+        st.warning("⚠️ SKU not found. Try again.")
         st.stop()
 
     description = str(match.iloc[0].get("Description", ""))
@@ -172,29 +170,30 @@ if st.button("Generate Label"):
     pdf_path = create_label_pdf(sku_input, description)
 
     if not pdf_path or not os.path.exists(pdf_path):
-        st.error("❌ Failed to generate label PDF.")
+        st.error("❌ Failed to generate label.")
         st.stop()
 
     with open(pdf_path, "rb") as f:
         pdf_bytes = f.read()
-        base64_pdf = base64.b64encode(pdf_bytes).decode("utf-8")
+
+    base64_pdf = base64.b64encode(pdf_bytes).decode("utf-8")
 
     print_button_html = f"""
     <script>
     function openPDF() {{
         const pdfData = atob("{base64_pdf}");
-        const byteArray = new Uint8Array(pdfData.length);
+        const arr = new Uint8Array(pdfData.length);
         for (let i = 0; i < pdfData.length; i++) {{
-            byteArray[i] = pdfData.charCodeAt(i);
+            arr[i] = pdfData.charCodeAt(i);
         }}
-        const blob = new Blob([byteArray], {{ type: 'application/pdf' }});
-        const blobUrl = URL.createObjectURL(blob);
-        const printWindow = window.open(blobUrl);
+        const blob = new Blob([arr], {{ type: 'application/pdf' }});
+        const url = URL.createObjectURL(blob);
+        const win = window.open(url);
 
-        printWindow.onload = function() {{
+        win.onload = function() {{
             setTimeout(() => {{
-                printWindow.focus();
-                printWindow.print();
+                win.focus();
+                win.print();
             }}, 600);
         }};
     }}
@@ -202,5 +201,5 @@ if st.button("Generate Label"):
     <button onclick="openPDF()">🖨️ Print Label</button>
     """
 
-    st.success("✅ Label ready!")
+    st.success("✅ Label generated!")
     components.html(print_button_html, height=120)
